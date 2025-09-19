@@ -1,55 +1,54 @@
 # go-osc-voicevox
 
-OSCで受信したテキストをVOICEVOX ENGINE（HTTP API）で合成し、リアルタイムで再生するGoアプリです。
+A Go application that receives text via OSC, synthesizes speech using VOICEVOX ENGINE (HTTP API), and plays it in real time.
 
-## 特徴
-- OSCでテキスト受信（/text アドレス）
-- VOICEVOX ENGINE HTTP API（/audio_query, /synthesis）で音声合成
-- WAVデータをPCM再生（cgo不要、Windows/macOS両対応）
-- コマンドライン引数でエンジンURL・話者ID・OSCポート指定可
+## Features
+- Receives text via OSC (`/text` address)
+- Speech synthesis using VOICEVOX ENGINE HTTP API (`/audio_query`, `/synthesis`)
+- Plays WAV data as PCM (no cgo required, works on both Windows and macOS)
+- Command-line flags for engine URL, speaker ID, and OSC port
 
-## 使い方
+## Usage
 
-### 1. VOICEVOX ENGINEの起動
-公式のVOICEVOX ENGINE（FastAPIサーバ）を起動してください。
+### 1. Start VOICEVOX ENGINE
+Launch the official VOICEVOX ENGINE (FastAPI server).
 
-例: 
+Example:
 ```
 voicevox_engine --host 0.0.0.0 --port 50021
 ```
 
-### 2. このアプリのビルド
+### 2. Build this app
 #### macOS
 ```
 go build -o go-osc-voicevox main.go
 ```
-#### Windows用クロスビルド（macから）
+#### Cross-build for Windows (from macOS)
 ```
 GOOS=windows GOARCH=amd64 go build -o go-osc-voicevox.exe main.go
 ```
 
-### 3. 実行例
+### 3. Run
 ```
-# デフォルト（127.0.0.1:50021, 話者ID=1, ポート9000）
+# Default (127.0.0.1:50021, speaker ID=1, port 9000)
 ./go-osc-voicevox
 
-# 任意のVOICEVOX ENGINEや話者ID、OSCポートを指定
+# Specify VOICEVOX ENGINE, speaker ID, and OSC port
 ./go-osc-voicevox -engine http://localhost:50021 -speaker 3 -port 9001
 ```
 
-### 4. OSCクライアントからの送信例
-`/text` アドレスでテキスト（日本語可）を送信してください。
+### 4. Example: Sending OSC from a client
+Send text (including Japanese) to the `/text` address.
 
-例: (Python)
+Example (Python):
 ```python
 from pythonosc.udp_client import SimpleUDPClient
 client = SimpleUDPClient('127.0.0.1', 9000)
 client.send_message('/text', 'こんにちは、ずんだもんです')
 ```
 
-## 話者ID（speakerID）について
-VOICEVOX ENGINEの話者IDはエンジンのバージョンや辞書によって異なります。
-`/speakers` エンドポイントで確認できます。
+## About speakerID
+The VOICEVOX ENGINE speaker ID depends on the engine version and dictionary. You can check available IDs via the `/speakers` endpoint.
 
-## ライセンス
+## License
 MIT

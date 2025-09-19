@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"sync/atomic"
 	"time"
 
 	"github.com/faiface/beep"
@@ -16,6 +17,8 @@ import (
 	"github.com/faiface/beep/wav"
 	"github.com/hypebeast/go-osc/osc"
 )
+
+var isSpeaking int32 // 0: not speaking, 1: speaking
 
 var (
 	voicevoxEngineURL string
@@ -48,7 +51,15 @@ func newOSCServer(addr string, speakFunc func(string)) *osc.Server {
 		if !ok {
 			return
 		}
-		go speakFunc(text)
+		// 発話中なら無視
+		if !atomic.CompareAndSwapInt32(&isSpeaking, 0, 1) {
+			log.Printf("発話中のためOSC受信を無視: %s", text)
+			return
+		}
+		go func() {
+			speakFunc(text)
+			atomic.StoreInt32(&isSpeaking, 0)
+		}()
 	})
 	return &osc.Server{
 		Addr:       addr,
