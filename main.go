@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -16,19 +17,28 @@ import (
 	"github.com/hypebeast/go-osc/osc"
 )
 
-const (
-	voicevoxEngineURL       = "http://127.0.0.1:50021"
-	zundamonNormalSpeakerID = 1 // ずんだもんノーマルのID（VOICEVOX ENGINE v0.14.5以降）
-	oscListenPort           = 9000
+var (
+	voicevoxEngineURL string
+	speakerID         int
+	oscListenPort     int
 )
 
-type AudioQuery struct {
-	// VOICEVOX ENGINEのaudio_query APIのレスポンス構造体
-}
-
 func main() {
+	flag.StringVar(&voicevoxEngineURL, "engine", "http://127.0.0.1:50021", "VOICEVOX ENGINEのURL")
+	flag.IntVar(&speakerID, "speaker", 1, "VOICEVOXの話者ID")
+	flag.IntVar(&oscListenPort, "port", 9000, "OSC受信ポート")
+	flag.Parse()
 	// OSCサーバ起動
 	addr := fmt.Sprintf(":%d", oscListenPort)
+	server := newOSCServer(addr, speak)
+	log.Printf("OSCサーバ起動: %s (/text でテキスト受信)", addr)
+	if err := server.ListenAndServe(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// OSCサーバを生成し、/text受信時にspeakFuncを呼ぶ
+func newOSCServer(addr string, speakFunc func(string)) *osc.Server {
 	dispatcher := osc.NewStandardDispatcher()
 	dispatcher.AddMsgHandler("/text", func(msg *osc.Message) {
 		if len(msg.Arguments) == 0 {
@@ -38,39 +48,34 @@ func main() {
 		if !ok {
 			return
 		}
-		go speak(text)
+		go speakFunc(text)
 	})
-	server := &osc.Server{
+	return &osc.Server{
 		Addr:       addr,
 		Dispatcher: dispatcher,
 	}
-	log.Printf("OSCサーバ起動: %s (/text でテキスト受信)", addr)
-	if err := server.ListenAndServe(); err != nil {
-		log.Fatal(err)
-	}
 }
 
+// テキストをVOICEVOXで音声合成し再生
 func speak(text string) {
 	log.Printf("受信テキスト: %s", text)
-	// 1. audio_query
-	query, err := audioQuery(text, zundamonNormalSpeakerID)
+	audioQueryJSON, err := fetchAudioQuery(text, speakerID)
 	if err != nil {
 		log.Printf("audio_query失敗: %v", err)
 		return
 	}
-	// 2. synthesis
-	wavData, err := synthesis(query, zundamonNormalSpeakerID)
+	wavData, err := fetchSynthesis(audioQueryJSON, speakerID)
 	if err != nil {
 		log.Printf("synthesis失敗: %v", err)
 		return
 	}
-	// 3. 再生
 	if err := playWav(wavData); err != nil {
 		log.Printf("再生失敗: %v", err)
 	}
 }
 
-func audioQuery(text string, speaker int) ([]byte, error) {
+// VOICEVOX ENGINE /audio_query APIを叩き、音声合成用JSONを取得
+func fetchAudioQuery(text string, speaker int) ([]byte, error) {
 	apiUrl := fmt.Sprintf("%s/audio_query", voicevoxEngineURL)
 	data := url.Values{}
 	data.Set("text", text)
@@ -86,7 +91,6 @@ func audioQuery(text string, speaker int) ([]byte, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	// JSONとして一度デコードし、再エンコードして返す
 	var query map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&query); err != nil {
 		return nil, err
@@ -94,9 +98,10 @@ func audioQuery(text string, speaker int) ([]byte, error) {
 	return json.Marshal(query)
 }
 
-func synthesis(query []byte, speaker int) ([]byte, error) {
+// VOICEVOX ENGINE /synthesis APIを叩き、WAVデータを取得
+func fetchSynthesis(audioQueryJSON []byte, speaker int) ([]byte, error) {
 	url := fmt.Sprintf("%s/synthesis?speaker=%d", voicevoxEngineURL, speaker)
-	resp, err := http.Post(url, "application/json", bytes.NewReader(query))
+	resp, err := http.Post(url, "application/json", bytes.NewReader(audioQueryJSON))
 	if err != nil {
 		return nil, err
 	}
@@ -104,6 +109,7 @@ func synthesis(query []byte, speaker int) ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
+// WAVデータをPCM再生
 func playWav(wavData []byte) error {
 	streamer, format, err := wav.Decode(bytes.NewReader(wavData))
 	if err != nil {
