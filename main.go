@@ -40,7 +40,7 @@ func main() {
 	}
 }
 
-// OSCサーバを生成し、/text受信時にspeakFuncを呼ぶ
+// Create an OSC server and call speakFunc when /text is received
 func newOSCServer(addr string, speakFunc func(string)) *osc.Server {
 	dispatcher := osc.NewStandardDispatcher()
 	dispatcher.AddMsgHandler("/text", func(msg *osc.Message) {
