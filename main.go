@@ -9,7 +9,6 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"sync/atomic"
 	"time"
 
 	"github.com/faiface/beep"
@@ -18,30 +17,43 @@ import (
 	"github.com/hypebeast/go-osc/osc"
 )
 
-var isSpeaking int32 // 0: not speaking, 1: speaking
-
 var (
 	voicevoxEngineURL string
 	speakerID         int
 	oscListenPort     int
+	queueSize         int
+	textQueue         chan string
 )
 
 func main() {
 	flag.StringVar(&voicevoxEngineURL, "engine", "http://127.0.0.1:50021", "VOICEVOX ENGINE URL")
 	flag.IntVar(&speakerID, "speaker", 1, "VOICEVOX speaker ID")
 	flag.IntVar(&oscListenPort, "port", 9000, "OSC listen port")
+	flag.IntVar(&queueSize, "queue", 2, "Queue size (1-10)")
 	flag.Parse()
+	
+	// Validate queue size
+	if queueSize < 1 || queueSize > 10 {
+		log.Fatal("Queue size must be between 1 and 10")
+	}
+	
+	// Initialize text queue
+	textQueue = make(chan string, queueSize)
+	
+	// Start speech worker
+	go speechWorker()
+	
 	// Start OSC server
 	addr := fmt.Sprintf(":%d", oscListenPort)
-	server := newOSCServer(addr, speak)
-	log.Printf("OSC server started: %s (listening for /text)", addr)
+	server := newOSCServer(addr)
+	log.Printf("OSC server started: %s (listening for /text, queue size: %d)", addr, queueSize)
 	if err := server.ListenAndServe(); err != nil {
 		log.Fatal(err)
 	}
 }
 
 // Create an OSC server and call speakFunc when /text is received
-func newOSCServer(addr string, speakFunc func(string)) *osc.Server {
+func newOSCServer(addr string) *osc.Server {
 	dispatcher := osc.NewStandardDispatcher()
 	dispatcher.AddMsgHandler("/text", func(msg *osc.Message) {
 		if len(msg.Arguments) == 0 {
@@ -51,19 +63,24 @@ func newOSCServer(addr string, speakFunc func(string)) *osc.Server {
 		if !ok {
 			return
 		}
-		// Ignore OSC while speaking
-		if !atomic.CompareAndSwapInt32(&isSpeaking, 0, 1) {
-			log.Printf("OSC message ignored while speaking: %s", text)
-			return
+		// Try to add text to queue, ignore if queue is full
+		select {
+		case textQueue <- text:
+			log.Printf("Text queued: %s (queue: %d/%d)", text, len(textQueue), cap(textQueue))
+		default:
+			log.Printf("Queue full, OSC message ignored: %s", text)
 		}
-		go func() {
-			speakFunc(text)
-			atomic.StoreInt32(&isSpeaking, 0)
-		}()
 	})
 	return &osc.Server{
 		Addr:       addr,
 		Dispatcher: dispatcher,
+	}
+}
+
+// Speech worker processes queued texts one by one
+func speechWorker() {
+	for text := range textQueue {
+		speak(text)
 	}
 }
 
