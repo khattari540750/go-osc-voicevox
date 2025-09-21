@@ -31,18 +31,18 @@ func main() {
 	flag.IntVar(&oscListenPort, "port", 9000, "OSC listen port")
 	flag.IntVar(&queueSize, "queue", 2, "Queue size (1-10)")
 	flag.Parse()
-	
+
 	// Validate queue size
 	if queueSize < 1 || queueSize > 10 {
 		log.Fatal("Queue size must be between 1 and 10")
 	}
-	
+
 	// Initialize text queue
 	textQueue = make(chan string, queueSize)
-	
+
 	// Start speech worker
 	go speechWorker()
-	
+
 	// Start OSC server
 	addr := fmt.Sprintf(":%d", oscListenPort)
 	server := newOSCServer(addr)
