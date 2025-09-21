@@ -6,7 +6,9 @@ A Go application that receives text via OSC, synthesizes speech using VOICEVOX E
 - Receives text via OSC (`/text` address)
 - Speech synthesis using VOICEVOX ENGINE HTTP API (`/audio_query`, `/synthesis`)
 - Plays WAV data as PCM (no cgo required, works on both Windows and macOS)
-- Command-line flags for engine URL, speaker ID, and OSC port
+- Command-line flags for engine URL, speaker ID, OSC port, and queue size
+- Queue system for handling multiple OSC messages (configurable size 1-10, default 2)
+- Sequential speech processing (one speech at a time, queued messages processed in order)
 
 ## Usage
 
@@ -30,12 +32,18 @@ GOOS=windows GOARCH=amd64 go build -o go-osc-voicevox.exe main.go
 
 ### 3. Run
 ```
-# Default (127.0.0.1:50021, speaker ID=1, port 9000)
+# Default (127.0.0.1:50021, speaker ID=1, port 9000, queue size=2)
 ./go-osc-voicevox
 
-# Specify VOICEVOX ENGINE, speaker ID, and OSC port
-./go-osc-voicevox -engine http://localhost:50021 -speaker 3 -port 9001
+# Specify VOICEVOX ENGINE, speaker ID, OSC port, and queue size
+./go-osc-voicevox -engine http://localhost:50021 -speaker 3 -port 9001 -queue 5
 ```
+
+#### Command-line options
+- `-engine`: VOICEVOX ENGINE URL (default: http://127.0.0.1:50021)
+- `-speaker`: VOICEVOX speaker ID (default: 1)
+- `-port`: OSC listen port (default: 9000)
+- `-queue`: Queue size for OSC messages, 1-10 (default: 2)
 
 ### 4. Example: Sending OSC from a client
 Send text (including Japanese) to the `/text` address.
@@ -46,6 +54,13 @@ from pythonosc.udp_client import SimpleUDPClient
 client = SimpleUDPClient('127.0.0.1', 9000)
 client.send_message('/text', 'こんにちは、ずんだもんです')
 ```
+
+## Queue System
+The application uses a queue system to handle multiple OSC messages:
+- OSC messages are queued and processed sequentially
+- Queue size is configurable (1-10, default 2)
+- When the queue is full, new OSC messages are ignored with a log message
+- Each speech synthesis completes before the next queued message is processed
 
 ## About speakerID
 The VOICEVOX ENGINE speaker ID depends on the engine version and dictionary. You can check available IDs via the `/speakers` endpoint.
