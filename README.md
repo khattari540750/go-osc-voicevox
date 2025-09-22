@@ -32,7 +32,7 @@ GOOS=windows GOARCH=amd64 go build -o go-osc-voicevox.exe main.go
 
 ### 3. Run
 ```
-# Default (127.0.0.1:50021, speaker ID=1, port 9000, queue size=2)
+# Default (127.0.0.1:50021, speaker ID=1, port 9000, queue size=0)
 ./go-osc-voicevox
 
 # Specify VOICEVOX ENGINE, speaker ID, OSC port, and queue size
@@ -43,7 +43,7 @@ GOOS=windows GOARCH=amd64 go build -o go-osc-voicevox.exe main.go
 - `-engine`: VOICEVOX ENGINE URL (default: http://127.0.0.1:50021)
 - `-speaker`: VOICEVOX speaker ID (default: 1)
 - `-port`: OSC listen port (default: 9000)
-- `-queue`: Queue size for OSC messages, 1-10 (default: 2)
+- `-queue`: Queue size for OSC messages, 0-10 (default: 0, 0=no queue, ignore while speaking)
 
 ### 4. Example: Sending OSC from a client
 Send text (including Japanese) to the `/text` address.
@@ -56,11 +56,18 @@ client.send_message('/text', 'こんにちは、ずんだもんです')
 ```
 
 ## Queue System
-The application uses a queue system to handle multiple OSC messages:
+The application supports two modes for handling multiple OSC messages:
+
+### Queue Mode (queue size 1-10)
 - OSC messages are queued and processed sequentially
-- Queue size is configurable (1-10, default 2)
+- Queue size is configurable (1-10)
 - When the queue is full, new OSC messages are ignored with a log message
 - Each speech synthesis completes before the next queued message is processed
+
+### No Queue Mode (queue size 0, default)
+- OSC messages are processed immediately if not currently speaking
+- While speaking, new OSC messages are ignored with a log message
+- No queuing - only one speech at a time
 
 ## About speakerID
 The VOICEVOX ENGINE speaker ID depends on the engine version and dictionary. You can check available IDs via the `/speakers` endpoint.
